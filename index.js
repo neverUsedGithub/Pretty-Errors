@@ -112,7 +112,7 @@ export function getPrettified(err, opts) {
     const delim = THEME.comment("│");
     const lineStart = `${" ".repeat(lineNumberLength)} ${delim} `;
 
-    return `${THEME.comment("at")} ${THEME.symbol(`${path.basename(loc.filename)}:${loc.location.line}:${loc.location.col}`)}
+    return `${THEME.comment("at")} ${THEME.symbol(`${path.relative(process.cwd(), loc.filename)}:${loc.location.line}:${loc.location.col}`)}
 ${lineStart}
 ${THEME.number(loc.location.line)} ${delim} ${highlightedLine}
 ${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.redBright(opts?.underline ?? "‾")}
