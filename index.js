@@ -3,15 +3,34 @@ import chalk from "chalk";
 import Prism from 'prismjs';
 import path from "path";
 
-function getLocation(err) {
-    const firstLine = err.stack.split("\n")[1];
+/**
+ * @typedef {{ filename: string, functionName: string | null, location: { line: number, col: number }}} Location
+ * @typedef {{ underline?: string, noTrace?: boolean }} Options
+ */
+
+/**
+ * Get the location from an error.
+ * @param {Error} err The error.
+ * @param {number} index The index of the line on the stack to get location of.
+ * @returns {Location}
+ */
+function getLocation(err, index) {
+    if (!err.stack)
+        throw new Error(`getLocation(err) failed: error.stack was empty.`);
+    
+    const firstLine = err.stack.split("\n")[index + 1];
+    let functionName = null;
     let errorLocation;
 
-    if (firstLine.includes("("))
+    if (firstLine.includes("(")) {
+        functionName = firstLine.trim().substring(3);
+        functionName = functionName.substring(0, functionName.indexOf("(")).trim();
+
         errorLocation = firstLine.substring(
             firstLine.indexOf("(") + 1,
             firstLine.lastIndexOf(")")
         );
+    }
     else
         errorLocation = firstLine
             .trim()
@@ -35,6 +54,7 @@ function getLocation(err) {
     
     return {
         filename,
+        functionName,
         location: {
             line: parseInt(location.line),
             col: parseInt(location.col)
@@ -96,34 +116,69 @@ function highlightStream(token) {
 }
 
 /**
+ * 
+ * @param {Location} loc 
+ * @param {string} lineStart
+ * @param {number} maxLineNumberLength
+ * @param {string} delim
+ * @param {string} highlightedLine
+ * @param {Options} [opts]
+ * @returns {string}
+ */
+function formatErrorLine(loc, lineStart, maxLineNumberLength, delim, highlightedLine, opts) {
+    return `${THEME.comment("at")} ${THEME.symbol(`${path.relative(process.cwd(), loc.filename)}:${loc.location.line}:${loc.location.col}`)} ${loc.functionName ? `${THEME.comment("in")} ${THEME.keyword("function")} ${THEME.function(loc.functionName)}` : ""}
+${lineStart}
+${THEME.number(loc.location.line.toString().padStart(maxLineNumberLength))} ${delim} ${highlightedLine}
+${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.redBright(opts?.underline ?? "‾")}`
+}
+
+/**
  * Get a prettified version of an error.
  * @param {Error} err The error object.
- * @param {{ underline?: string }} [opts] Settings to use.
+ * @param {Options} [opts] Settings to use.
  * @returns {string}
  */
 export function getPrettified(err, opts) {
-    const loc = getLocation(err);
-    const filecontent = readFileSync(loc.filename, { encoding: "utf8" });
-    const currentLine = filecontent.split("\n")[loc.location.line - 1];
-    const tokens = Prism.tokenize(currentLine, Prism.languages.javascript);
-
-    let highlightedLine = highlightStream(tokens);
-    const lineNumberLength = loc.location.line.toString().length;
+    const MAX_STACK_LENGTH = opts?.noTrace ? 1 : (err.stack?.split("\n") || []).length - 2;
     const delim = THEME.comment("│");
-    const lineStart = `${" ".repeat(lineNumberLength)} ${delim} `;
+    let maxLineNumberLength = 0;
+    /** @type {{ loc: Location, highlightedLine: string }[]} */
+    let highlighted = [];
 
-    return `${THEME.comment("at")} ${THEME.symbol(`${path.relative(process.cwd(), loc.filename)}:${loc.location.line}:${loc.location.col}`)}
-${lineStart}
-${THEME.number(loc.location.line)} ${delim} ${highlightedLine}
-${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.redBright(opts?.underline ?? "‾")}
-${" ".repeat(lineNumberLength)} ${THEME.comment("╰──")} ${chalk.redBright(err.name)}${THEME.comment(":")} ${THEME.symbol(err.message)}`
+    for (let i = MAX_STACK_LENGTH - 1; i >= 0; i--) {
+        const loc = getLocation(err, i);
+        const filecontent = readFileSync(loc.filename, { encoding: "utf8" });
+        const currentLine = filecontent.split("\n")[loc.location.line - 1];
+        const tokens = Prism.tokenize(currentLine, Prism.languages.javascript);
+
+        let highlightedLine = highlightStream(tokens);
+        const lineNumberLength = loc.location.line.toString().length;
+
+        if (lineNumberLength > maxLineNumberLength)
+            maxLineNumberLength = lineNumberLength;
+
+        highlighted.push({ loc, highlightedLine });
+    }
+    
+    const lineStart = `${" ".repeat(maxLineNumberLength)} ${delim} `;
+
+    let lines = "";
+
+    for (let i = 0; i < highlighted.length; i++) {
+        lines += formatErrorLine(highlighted[i].loc, lineStart, maxLineNumberLength, delim, highlighted[i].highlightedLine);
+        if (i !== highlighted.length - 1)
+            lines += `\n`;
+    }
+
+    return `${lines}
+${" ".repeat(maxLineNumberLength)} ${THEME.comment("╰──")} ${chalk.redBright(err.name)}${THEME.comment(":")} ${THEME.symbol(err.message)}`
 }
 
 /**
  * Run a function in `pretty-error` mode.
  * @template {() => any} T
  * @param {T} funct The function to run in `pretty-error` mode
- * @param {{ underline?: string }} [opts] Settings to use.
+ * @param {Options} [opts] Settings to use.
  * @returns {ReturnType<T>}
  */
 export default function prettyErrors(funct, opts) {
@@ -131,7 +186,7 @@ export default function prettyErrors(funct, opts) {
         return funct();
     } catch(err) {
         const msg = getPrettified(err, opts)
-        process.stdout.write(msg);
+        console.error(msg);
         process.exit(1);
     }
 }
