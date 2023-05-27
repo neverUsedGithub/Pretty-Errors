@@ -5,7 +5,7 @@ import path from "path";
 
 /**
  * @typedef {{ filename: string, functionName: string | null, location: { line: number, col: number }}} Location
- * @typedef {{ underline?: string, noTrace?: boolean }} Options
+ * @typedef {{ underline?: string, noTrace?: boolean, smartUnderline: boolean }} Options
  */
 
 /**
@@ -120,16 +120,17 @@ function highlightStream(token) {
  * @param {Location} loc 
  * @param {string} lineStart
  * @param {number} maxLineNumberLength
+ * @param {number} underlineLength
  * @param {string} delim
  * @param {string} highlightedLine
  * @param {Options} [opts]
  * @returns {string}
  */
-function formatErrorLine(loc, lineStart, maxLineNumberLength, delim, highlightedLine, opts) {
+function formatErrorLine(loc, lineStart, maxLineNumberLength, underlineLength, delim, highlightedLine, opts) {
     return `${THEME.comment("at")} ${THEME.symbol(`${path.relative(process.cwd(), loc.filename)}:${loc.location.line}:${loc.location.col}`)} ${loc.functionName ? `${THEME.comment("in")} ${THEME.keyword("function")} ${THEME.function(loc.functionName)}` : ""}
 ${lineStart}
 ${THEME.number(loc.location.line.toString().padStart(maxLineNumberLength))} ${delim} ${highlightedLine}
-${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.redBright(opts?.underline ?? "‾")}`
+${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.redBright((opts?.underline ?? "‾").repeat(underlineLength))}`
 }
 
 /**
@@ -142,7 +143,7 @@ export function getPrettified(err, opts) {
     const MAX_STACK_LENGTH = opts?.noTrace ? 1 : (err.stack?.split("\n") || []).length - 2;
     const delim = THEME.comment("│");
     let maxLineNumberLength = 0;
-    /** @type {{ loc: Location, highlightedLine: string }[]} */
+    /** @type {{ loc: Location, highlightedLine: string, underlineLength: number }[]} */
     let highlighted = [];
 
     for (let i = MAX_STACK_LENGTH - 1; i >= 0; i--) {
@@ -150,6 +151,25 @@ export function getPrettified(err, opts) {
         const filecontent = readFileSync(loc.filename, { encoding: "utf8" });
         const currentLine = filecontent.split("\n")[loc.location.line - 1];
         const tokens = Prism.tokenize(currentLine, Prism.languages.javascript);
+        let underlineLength = 1;
+
+        if (opts?.smartUnderline ?? true) {
+            let currentIndex = 0;
+
+            for (const tok of tokens) {
+                if (loc.location.col <= currentIndex) {
+                    underlineLength = tok.length;
+                    break;
+                }
+
+                currentIndex += tok.length;
+
+                if (loc.location.col <= currentIndex) {
+                    underlineLength = tok.length;
+                    break;
+                }
+            }
+        }
 
         let highlightedLine = highlightStream(tokens);
         const lineNumberLength = loc.location.line.toString().length;
@@ -157,7 +177,7 @@ export function getPrettified(err, opts) {
         if (lineNumberLength > maxLineNumberLength)
             maxLineNumberLength = lineNumberLength;
 
-        highlighted.push({ loc, highlightedLine });
+        highlighted.push({ loc, highlightedLine, underlineLength });
     }
     
     const lineStart = `${" ".repeat(maxLineNumberLength)} ${delim} `;
@@ -165,7 +185,7 @@ export function getPrettified(err, opts) {
     let lines = "";
 
     for (let i = 0; i < highlighted.length; i++) {
-        lines += formatErrorLine(highlighted[i].loc, lineStart, maxLineNumberLength, delim, highlighted[i].highlightedLine);
+        lines += formatErrorLine(highlighted[i].loc, lineStart, maxLineNumberLength, highlighted[i].underlineLength, delim, highlighted[i].highlightedLine);
         if (i !== highlighted.length - 1)
             lines += `\n`;
     }
