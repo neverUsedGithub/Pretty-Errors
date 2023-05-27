@@ -41,7 +41,7 @@ function getLocation(err, index) {
             .trim()
             .substring(3);
 
-    errorLocation = errorLocation.replace("file:///", "");
+    errorLocation = errorLocation.replace("file://" + (process.platform === "win32" ? "/" : ""), "");
 
     const location = { line: "", col: "" };
     let filename = "";
