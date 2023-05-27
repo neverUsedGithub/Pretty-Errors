@@ -44,18 +44,20 @@ function getLocation(err, index) {
     errorLocation = errorLocation.replace("file:///", "");
 
     const location = { line: "", col: "" };
-    let passedColons = 0;
     let filename = "";
     
-    for (let i = 0; i < errorLocation.length; i++) {
-        if (errorLocation[i] === ":") passedColons++;
-        if (passedColons <= 1)
-            filename += errorLocation[i];
-        else if (passedColons <= 2 && errorLocation[i] !== ":")
-            location.line += errorLocation[i];
-        else if (errorLocation[i] !== ":")
-            location.col += errorLocation[i];
+    let i = errorLocation.length - 1;
+    while ("0123456789".includes(errorLocation[i])) {
+      location.col = errorLocation[i] + location.col;
+      i--;
     }
+    i--;
+    while ("0123456789".includes(errorLocation[i])) {
+      location.line = errorLocation[i] + location.line;
+      i--;
+    }
+          
+    filename = errorLocation.slice(0, i);
     
     return {
         filename,
@@ -135,7 +137,7 @@ function formatErrorLine(loc, lineStart, maxLineNumberLength, underlineLength, d
     return `${THEME.comment("at")} ${THEME.symbol(`${path.relative(process.cwd(), loc.filename)}:${loc.location.line}:${loc.location.col}`)} ${loc.functionName ? `${THEME.comment("in")} ${THEME.keyword("function")} ${THEME.function(loc.functionName)}` : ""}
 ${lineStart}
 ${THEME.number(loc.location.line.toString().padStart(maxLineNumberLength))} ${delim} ${highlightedLine}
-${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.redBright((opts?.underline ?? "‾").repeat(underlineLength))}`
+${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.red((opts?.underline ?? "‾").repeat(underlineLength))}`
 }
 
 /**
@@ -197,7 +199,7 @@ export function getPrettified(err, opts) {
     }
 
     return `${lines}
-${" ".repeat(maxLineNumberLength)} ${THEME.comment("╰──")} ${chalk.redBright(err.name)}${THEME.comment(":")} ${THEME.symbol(err.message)}`
+${" ".repeat(maxLineNumberLength)} ${THEME.comment("╰──")} ${chalk.red(err.name)}${THEME.comment(":")} ${THEME.symbol(err.message)}`
 }
 
 /**
