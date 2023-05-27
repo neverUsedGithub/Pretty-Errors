@@ -95,7 +95,7 @@ const THEME = {
  * @returns {(text: string) => string}
  */
 function getColor(token) {
-    return THEME[token.type];
+    return THEME[token.type] || chalk.reset;
 }
 
 /**
@@ -135,7 +135,7 @@ function formatErrorLine({ loc, highlightedLine, underlineLength, hasContent }, 
     const firstLine = `${THEME.comment("at")} ${THEME.symbol(`${path.relative(process.cwd(), loc.filename)}:${loc.location.line}:${loc.location.col}`)} ${loc.functionName ? `${THEME.comment("in")} ${THEME.keyword("function")} ${THEME.function(loc.functionName)}` : ""}`;
 
     if (!hasContent) return firstLine;
-    
+
     return `${firstLine}
 ${lineStart}
 ${THEME.number(loc.location.line.toString().padStart(maxLineNumberLength))} ${delim} ${highlightedLine}
