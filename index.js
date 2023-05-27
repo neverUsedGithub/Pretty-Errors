@@ -136,7 +136,7 @@ ${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.redBright((opts?.underlin
 /**
  * Get a prettified version of an error.
  * @param {Error} err The error object.
- * @param {Options} [opts] Settings to use.
+ * @param {Options} [opts] The settings to use.
  * @returns {string}
  */
 export function getPrettified(err, opts) {
@@ -157,15 +157,12 @@ export function getPrettified(err, opts) {
             let currentIndex = 0;
 
             for (const tok of tokens) {
-                if (loc.location.col <= currentIndex) {
-                    underlineLength = tok.length;
-                    break;
-                }
-
                 currentIndex += tok.length;
 
                 if (loc.location.col <= currentIndex) {
-                    underlineLength = tok.length;
+                    underlineLength = typeof tok === "string"
+                        ? tok.trim().length
+                        : tok.length;
                     break;
                 }
             }
@@ -195,10 +192,10 @@ ${" ".repeat(maxLineNumberLength)} ${THEME.comment("╰──")} ${chalk.redBrig
 }
 
 /**
- * Run a function in `pretty-error` mode.
+ * Execute a function while handling exceptions and pretty printing them.
  * @template {() => any} T
- * @param {T} funct The function to run in `pretty-error` mode
- * @param {Options} [opts] Settings to use.
+ * @param {T} funct The function.
+ * @param {Options} [opts] The settings to use.
  * @returns {ReturnType<T>}
  */
 export default function prettyErrors(funct, opts) {
@@ -211,3 +208,21 @@ export default function prettyErrors(funct, opts) {
     }
 }
 
+const defaultPrepare = Error.prepareStackTrace;
+
+/**
+ * Prettify every error.
+ * @param {Options} [opts] The settings to use.
+ */
+export function start(opts) {
+    Error.prepareStackTrace = (err) => {
+        return "\n" + getPrettified(err, opts) + "\n";
+    }
+}
+
+/**
+ * Stop prettying every error.
+ */
+export function stop() {
+    Error.prepareStackTrace = defaultPrepare;
+}
