@@ -1,6 +1,7 @@
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import chalk from "chalk";
 import Prism from 'prismjs';
+import * as url from "url";
 import path from "path";
 
 /**
@@ -9,7 +10,8 @@ import path from "path";
  *     underline?: string
  *     noTrace?: boolean,
  *     smartUnderline?: boolean,
- *     skipNodeFiles?: boolean
+ *     skipNodeFiles?: boolean,
+ *     skipModules?: string[]
  * }} Options
  */
 
@@ -41,7 +43,8 @@ function getLocation(err, index) {
             .trim()
             .substring(3);
 
-    errorLocation = errorLocation.replace("file://" + (process.platform === "win32" ? "/" : ""), "");
+    if (errorLocation.startsWith("file://"))
+        errorLocation = url.fileURLToPath(errorLocation);
 
     const location = { line: "", col: "" };
     let filename = "";
@@ -155,10 +158,16 @@ export function getPrettified(err, opts) {
     /** @type {{ loc: Location, highlightedLine: string, underlineLength: number, hasContent: boolean }[]} */
     let highlighted = [];
 
-    for (let i = MAX_STACK_LENGTH; i >= 0; i--) {
+    stack_loop: for (let i = MAX_STACK_LENGTH; i >= 0; i--) {
         const loc = getLocation(err, i);
         if (opts?.skipNodeFiles && loc.filename.startsWith("node:"))
             continue;
+        if (opts?.skipModules) {
+            for (let i = 0; i < opts.skipModules.length; i++) {
+                if (loc.filename.includes("node_modules" + path.sep + opts.skipModules[i]))
+                    continue stack_loop;
+            }
+        }
         let filecontent;
         let hasContent = false;
         try {
