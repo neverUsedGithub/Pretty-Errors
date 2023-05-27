@@ -124,17 +124,19 @@ function highlightStream(token) {
 
 /**
  * 
- * @param {Location} loc 
+ * @param {{ loc: Location, highlightedLine: string, underlineLength: number, hasContent: boolean }} loc 
  * @param {string} lineStart
  * @param {number} maxLineNumberLength
- * @param {number} underlineLength
  * @param {string} delim
- * @param {string} highlightedLine
  * @param {Options} [opts]
  * @returns {string}
  */
-function formatErrorLine(loc, lineStart, maxLineNumberLength, underlineLength, delim, highlightedLine, opts) {
-    return `${THEME.comment("at")} ${THEME.symbol(`${path.relative(process.cwd(), loc.filename)}:${loc.location.line}:${loc.location.col}`)} ${loc.functionName ? `${THEME.comment("in")} ${THEME.keyword("function")} ${THEME.function(loc.functionName)}` : ""}
+function formatErrorLine({ loc, highlightedLine, underlineLength, hasContent }, lineStart, maxLineNumberLength, delim, opts) {
+    const firstLine = `${THEME.comment("at")} ${THEME.symbol(`${path.relative(process.cwd(), loc.filename)}:${loc.location.line}:${loc.location.col}`)} ${loc.functionName ? `${THEME.comment("in")} ${THEME.keyword("function")} ${THEME.function(loc.functionName)}` : ""}`;
+
+    if (!hasContent) return firstLine;
+    
+    return `${firstLine}
 ${lineStart}
 ${THEME.number(loc.location.line.toString().padStart(maxLineNumberLength))} ${delim} ${highlightedLine}
 ${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.red((opts?.underline ?? "‾").repeat(underlineLength))}`
@@ -150,42 +152,50 @@ export function getPrettified(err, opts) {
     const MAX_STACK_LENGTH = opts?.noTrace ? 1 : (err.stack?.split("\n") || []).length - 2;
     const delim = THEME.comment("│");
     let maxLineNumberLength = 0;
-    /** @type {{ loc: Location, highlightedLine: string, underlineLength: number }[]} */
+    /** @type {{ loc: Location, highlightedLine: string, underlineLength: number, hasContent: boolean }[]} */
     let highlighted = [];
 
     for (let i = MAX_STACK_LENGTH; i >= 0; i--) {
         const loc = getLocation(err, i);
-        if (loc.filename.startsWith("node:internal"))
-            continue;
         if (opts?.skipNodeFiles && loc.filename.startsWith("node:"))
             continue;
-        const filecontent = readFileSync(loc.filename, { encoding: "utf8" });
-        const currentLine = filecontent.split("\n")[loc.location.line - 1];
-        const tokens = Prism.tokenize(currentLine, Prism.languages.javascript);
+        let filecontent;
+        let hasContent = false;
+        try {
+            filecontent = readFileSync(loc.filename, { encoding: "utf8" });
+            hasContent = true;
+        } catch {}
+
+        let highlightedLine = "";
         let underlineLength = 1;
 
-        if (opts?.smartUnderline ?? true) {
-            let currentIndex = 0;
+        if (hasContent && filecontent) {
+            const currentLine = filecontent.split("\n")[loc.location.line - 1];
+            const tokens = Prism.tokenize(currentLine, Prism.languages.javascript);
 
-            for (const tok of tokens) {
-                currentIndex += tok.length;
+            if (opts?.smartUnderline ?? true) {
+                let currentIndex = 0;
 
-                if (loc.location.col <= currentIndex) {
-                    underlineLength = typeof tok === "string"
-                        ? tok.trim().length
-                        : tok.length;
-                    break;
+                for (const tok of tokens) {
+                    currentIndex += tok.length;
+
+                    if (loc.location.col <= currentIndex) {
+                        underlineLength = typeof tok === "string"
+                            ? tok.trim().length
+                            : tok.length;
+                        break;
+                    }
                 }
             }
+
+            highlightedLine = highlightStream(tokens);
+            const lineNumberLength = loc.location.line.toString().length;
+
+            if (lineNumberLength > maxLineNumberLength)
+                maxLineNumberLength = lineNumberLength;
         }
 
-        let highlightedLine = highlightStream(tokens);
-        const lineNumberLength = loc.location.line.toString().length;
-
-        if (lineNumberLength > maxLineNumberLength)
-            maxLineNumberLength = lineNumberLength;
-
-        highlighted.push({ loc, highlightedLine, underlineLength });
+        highlighted.push({ loc, highlightedLine, underlineLength, hasContent });
     }
     
     const lineStart = `${" ".repeat(maxLineNumberLength)} ${delim} `;
@@ -193,7 +203,7 @@ export function getPrettified(err, opts) {
     let lines = "";
 
     for (let i = 0; i < highlighted.length; i++) {
-        lines += formatErrorLine(highlighted[i].loc, lineStart, maxLineNumberLength, highlighted[i].underlineLength, delim, highlighted[i].highlightedLine, opts);
+        lines += formatErrorLine(highlighted[i], lineStart, maxLineNumberLength, delim, opts);
         if (i !== highlighted.length - 1)
             lines += `\n`;
     }
