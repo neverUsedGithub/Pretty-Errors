@@ -1,5 +1,9 @@
-import { start } from "../index.js";
+import { start, stop } from "../index.js";
 
 start();
 
-10 + doesntExist;
+console.log(new Error("ee"))
+
+stop();
+
+console.log(new Error("ee"))
