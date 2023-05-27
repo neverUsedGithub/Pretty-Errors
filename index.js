@@ -152,7 +152,7 @@ ${lineStart}${" ".repeat(loc.location.col - 1)}${chalk.red((opts?.underline ?? "
  * @returns {string}
  */
 export function getPrettified(err, opts) {
-    const MAX_STACK_LENGTH = opts?.noTrace ? 1 : (err.stack?.split("\n") || []).length - 2;
+    const MAX_STACK_LENGTH = opts?.noTrace ? 0 : (err.stack?.split("\n") || []).length - 2;
     const delim = THEME.comment("│");
     let maxLineNumberLength = 0;
     /** @type {{ loc: Location, highlightedLine: string, underlineLength: number, hasContent: boolean }[]} */
