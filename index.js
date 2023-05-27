@@ -5,7 +5,12 @@ import path from "path";
 
 /**
  * @typedef {{ filename: string, functionName: string | null, location: { line: number, col: number }}} Location
- * @typedef {{ underline?: string, noTrace?: boolean, smartUnderline: boolean }} Options
+ * @typedef {{
+ *     underline?: string
+ *     noTrace?: boolean,
+ *     smartUnderline?: boolean,
+ *     skipNodeFiles?: boolean
+ * }} Options
  */
 
 /**
@@ -146,8 +151,12 @@ export function getPrettified(err, opts) {
     /** @type {{ loc: Location, highlightedLine: string, underlineLength: number }[]} */
     let highlighted = [];
 
-    for (let i = MAX_STACK_LENGTH - 1; i >= 0; i--) {
+    for (let i = MAX_STACK_LENGTH; i >= 0; i--) {
         const loc = getLocation(err, i);
+        if (loc.filename.startsWith("node:internal"))
+            continue;
+        if (opts?.skipNodeFiles && loc.filename.startsWith("node:"))
+            continue;
         const filecontent = readFileSync(loc.filename, { encoding: "utf8" });
         const currentLine = filecontent.split("\n")[loc.location.line - 1];
         const tokens = Prism.tokenize(currentLine, Prism.languages.javascript);
@@ -182,7 +191,7 @@ export function getPrettified(err, opts) {
     let lines = "";
 
     for (let i = 0; i < highlighted.length; i++) {
-        lines += formatErrorLine(highlighted[i].loc, lineStart, maxLineNumberLength, highlighted[i].underlineLength, delim, highlighted[i].highlightedLine);
+        lines += formatErrorLine(highlighted[i].loc, lineStart, maxLineNumberLength, highlighted[i].underlineLength, delim, highlighted[i].highlightedLine, opts);
         if (i !== highlighted.length - 1)
             lines += `\n`;
     }
